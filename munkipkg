@@ -991,14 +991,18 @@ def main():
                            'exists. ')
     options, arguments = parser.parse_args()
 
-    if len(arguments) == 0:
-        parser.print_usage()
-        sys.exit(0)
-
     if len(arguments) > 1:
         print >> sys.stderr, (
             "ERROR: Only a single package project can be built at a time!")
         sys.exit(-1)
+
+    if len(arguments) == 0:
+        project_dir = os.getcwd()
+        if not valid_project_dir(project_dir):
+            parser.print_usage()
+            sys.exit(0)
+    else:
+        project_dir = arguments[0]
 
     if options.json and options.yaml:
         print >> sys.stderr, (
@@ -1013,21 +1017,21 @@ def main():
         sys.exit(-1)
 
     if options.create:
-        result = create_template_project(arguments[0], options)
+        result = create_template_project(project_dir, options)
         sys.exit(result)
 
     if options.import_pkg:
-        result = import_pkg(options.import_pkg, arguments[0], options)
+        result = import_pkg(options.import_pkg, project_dir, options)
         sys.exit(result)
 
     # options past here require a valid project_dir
-    if not valid_project_dir(arguments[0]):
+    if not valid_project_dir(project_dir):
         sys.exit(-1)
 
     if options.sync:
-        result = sync_from_bom_info(arguments[0], options)
+        result = sync_from_bom_info(project_dir, options)
     else:
-        result = build(arguments[0], options)
+        result = build(project_dir, options)
     sys.exit(result)
 
 if __name__ == '__main__':
