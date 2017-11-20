@@ -341,21 +341,33 @@ def sync_from_bom_info(project_dir, options):
                     # shouldn't be any empty lines in Bom.txt, but...
                     continue
                 parts = item.rstrip('\n').split('\t')
-                path = parts[0].lstrip('./')
+                path = parts[0]
+                if path.startswith('./'):
+                    path = path[2:]
                 full_mode = parts[1]
                 user_group = parts[2].partition('/')
                 desired_user = int(user_group[0])
                 desired_group = int(user_group[2])
                 desired_mode = int(full_mode[-4:], 8)
                 payload_path = os.path.join(payload_dir, path)
-                if os.path.exists(payload_path):
+                basename = os.path.basename(path)
+                if basename.startswith('._'):
+                    otherfile = os.path.join(
+                        os.path.dirname(path), basename[2:])
+                    print >> sys.stderr, (
+                        'WARNING: file %s contains extended attributes or a '
+                        'resource fork for %s. git and pkgbuild may not '
+                        'properly preserve extended attributes.'
+                        % (path, otherfile))
+                    continue
+                if os.path.lexists(payload_path):
                     # file exists, check permission bits and adjust if needed
-                    current_mode = stat.S_IMODE(os.stat(payload_path).st_mode)
+                    current_mode = stat.S_IMODE(os.lstat(payload_path).st_mode)
                     if current_mode != desired_mode:
                         display("Changing mode of %s to %s"
                                 % (payload_path, oct(desired_mode)),
                                 options.quiet)
-                        os.chmod(payload_path, desired_mode)
+                        os.lchmod(payload_path, desired_mode)
                         changes_made += 1
                 elif full_mode.startswith('4'):
                     # file doesn't exist and it's a directory; re-create it
@@ -373,14 +385,14 @@ def sync_from_bom_info(project_dir, options):
                     break
                 if running_as_root:
                     # we can sync owner and group as well
-                    current_user = os.stat(payload_path).st_uid
-                    current_group = os.stat(payload_path).st_gid
+                    current_user = os.lstat(payload_path).st_uid
+                    current_group = os.lstat(payload_path).st_gid
                     if (current_user != desired_user or
                             current_group != desired_group):
                         display("Changing user/group of %s to %s/%s"
                                 % (payload_path, desired_user, desired_group),
                                 options.quiet)
-                        os.chown(payload_path, desired_user, desired_group)
+                        os.lchown(payload_path, desired_user, desired_group)
                         changes_made += 1
 
     except (OSError, ValueError), err:
@@ -591,6 +603,11 @@ def build_distribution_pkg(build_info, options):
         build_info['project_dir'], REQUIREMENTS_PLIST)
     if os.path.exists(requirements_plist):
         cmd.extend(['--product', requirements_plist])
+    # if build_info contains a product id use that for product id, otherwise
+    # use package identifier
+    product_id = build_info.get('product id', build_info['identifier'])
+    cmd.extend(['--identifier', product_id, '--version', build_info['version']])
+    # add the input and output package paths
     cmd.extend(['--package', pkginputname, distoutputname])
 
     retcode = subprocess.call(cmd)
